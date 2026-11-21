@@ -1,7 +1,7 @@
 """
 uasset_read - Unreal Engine .uasset file parser
 
-Version 0.6.3
+Version 0.6.4
 
 Public API is controlled via __all__.
 The v1 pipeline was removed in the package-first refactor; the package
@@ -10,7 +10,7 @@ JSON, CLI, Python, and Agent tools project from the same PackageDocument
 through the v4 projection layer.
 """
 
-__version__ = "0.6.3"
+__version__ = "0.6.4"
 
 # ============================================================================
 # Stable Public API (direct imports)
