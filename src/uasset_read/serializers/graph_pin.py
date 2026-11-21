@@ -9,7 +9,7 @@ import logging
 import struct
 from typing import TYPE_CHECKING
 
-from uasset_read.exceptions import BINARY_READ_ERRORS
+from uasset_read.exceptions import BINARY_READ_ERRORS, ExportBoundsExceeded
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -239,6 +239,12 @@ def _read_pin_fstring_field(
             message=f"Pin {pin_name!r} field {field_name!r} could not be read: {exc}",
         )
         return None if none_on_failure else ""
+    except ExportBoundsExceeded:
+        # Export-scoped bounds violations keep the node-level fail-closed
+        # abort (graph_node.py re-raises them so a mid-pin failure cannot
+        # read garbage pins into a "complete" node); the provenance branch
+        # must not convert them into a tolerant None on a misaligned cursor.
+        raise
     except ParseError as exc:
         # Truncated stream (EOF short read). Original call sites keep the
         # graph-level abort; only the provenance branch converts the same
