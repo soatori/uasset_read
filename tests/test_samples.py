@@ -2721,13 +2721,14 @@ def _check_cli_preserves_input_files(tmp_path, monkeypatch, capsys):
 
     from uasset_read.cli import main
 
-    def _reject_overwrite(input_path: Path, output_path: Path):
-        before = input_path.read_bytes()
+    def _reject_overwrite(input_path: Path, output_path: Path, protected_path: Path | None = None):
+        protected = protected_path or input_path
+        before = protected.read_bytes()
         monkeypatch.setattr(sys, "argv", ["uasset_read", str(input_path), "-o", str(output_path)])
         with pytest.raises(SystemExit) as exit_info:
             main()
         assert exit_info.value.code == 3
-        assert input_path.read_bytes() == before
+        assert protected.read_bytes() == before
         assert "Output path aliases an input file" in capsys.readouterr().err
 
     helm = tmp_path / "Helm_BP.uasset"
@@ -2746,7 +2747,7 @@ def _check_cli_preserves_input_files(tmp_path, monkeypatch, capsys):
     shutil.copy2(SAMPLES / bulk.name, bulk)
     bulk_payload = tmp_path / "T_ParserBulk.uexp"
     shutil.copy2(SAMPLES / bulk_payload.name, bulk_payload)
-    _reject_overwrite(bulk, bulk_payload)
+    _reject_overwrite(bulk, bulk_payload, protected_path=bulk_payload)
 
     mapped = tmp_path / "BP_UnversionedTest.uasset"
     mapping = tmp_path / "UnversionedTest.usmap"
