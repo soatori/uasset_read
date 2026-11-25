@@ -24,7 +24,7 @@ from .projection import project_document
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
 
 # Canonical schema spelling is payload:export:N / payload:import:N.
-_PAYLOAD_ID_RE = re.compile(r"^payload:(export|import):(\d+)$")
+_PAYLOAD_ID_RE = re.compile(r"^payload:(export|import):([0-9]+)$")
 
 
 def json_byte_size(payload: Any) -> int:
@@ -37,13 +37,10 @@ def _parse_payload_id(payload_id: str) -> tuple[Literal["export", "import"], int
     m = _PAYLOAD_ID_RE.match(payload_id.strip())
     if not m:
         return None
-    return (cast(Literal["export", "import"], m.group(1)), int(m.group(2)))
-
-
-def _parse_export_index(payload_id: str) -> int | None:
-    """Return the export index for an export payload; imports are deferred."""
-    parsed = _parse_payload_id(payload_id)
-    return parsed[1] if parsed is not None and parsed[0] == "export" else None
+    try:
+        return (cast(Literal["export", "import"], m.group(1)), int(m.group(2)))
+    except ValueError:
+        return None
 
 
 def _err(
@@ -194,14 +191,19 @@ def extract_payload(
             "serial slice to address (issue #627)"
         )
 
-    if export_index is None:
-        export_index = _parse_export_index(payload_id)
-
-    if export_index is None:
+    if parsed is None or parsed[0] != "export":
         return _unavailable(
             "Payload extraction is deferred: the payload id does not resolve "
             "to an export serial slice (issue #627)"
         )
+
+    parsed_export_index = parsed[1]
+    if export_index is not None and export_index != parsed_export_index:
+        return _unavailable(
+            "Payload extraction is deferred: the payload id and export index "
+            "identify different exports (issue #627)"
+        )
+    export_index = parsed_export_index
 
     # Discovery: export serial-slice fallback (no BulkData header scan).
     descriptor = discover_payload_descriptor(

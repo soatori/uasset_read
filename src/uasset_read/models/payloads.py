@@ -55,8 +55,8 @@ def discover_payload_descriptor(
 
     Args:
         payload_id: Caller identifier echoed unchanged when export_index is
-            invalid; the Agent boundary accepts only the canonical
-            ``payload:export:N`` form.
+            invalid. The Agent boundary validates the export identity and
+            emits the descriptor id in canonical ``payload:export:N`` form.
         export_index: Index of the export that owns the payload.
         main_path: Path to the main .uasset/.umap file.
         sidecar_paths: Region name ("uexp"/"ubulk"/"uptnl") to sidecar path.

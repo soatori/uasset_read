@@ -6457,6 +6457,35 @@ def test_payload_descriptor_kind_requires_bulk_data_evidence():
     data, err = extract_payload_bytes(d, main_path=main, sidecar_paths={})
     assert err is None and data == main.read_bytes()[453535:453581]
 
+    # Agent payload identity must come from one validated export id/index.
+    import base64
+
+    from uasset_read.agent_tools import extract_payload, json_byte_size
+
+    asset = SAMPLES / "Helm_BP.uasset"
+    requested = extract_payload(str(asset), "payload:export:0", export_index=1)
+    malformed = extract_payload(str(asset), "bad-id", export_index=1)
+    for result in (requested, malformed):
+        assert result["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
+        assert "data" not in result
+
+    canonical = extract_payload(str(asset), "payload:export:0")
+    padded = extract_payload(str(asset), "  payload:export:000  ")
+    indexed = extract_payload(str(asset), "payload:export:0", export_index=0)
+    imported = extract_payload(str(asset), "payload:import:0", export_index=0)
+    assert imported["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
+    assert "data" not in imported
+    assert padded["id"] == "  payload:export:000  "
+    assert padded["payload_id"] == "payload:export:0"
+    assert base64.b64decode(padded["data"]) == base64.b64decode(canonical["data"])
+    assert indexed == canonical
+    assert canonical["id"] == canonical["payload_id"] == "payload:export:0"
+    assert canonical["size"] == 1803
+    assert base64.b64decode(canonical["data"]) == asset.read_bytes()[141365:143168]
+    budget = json_byte_size(canonical)
+    assert extract_payload(str(asset), "payload:export:0", max_bytes=budget - 1)["code"] == "BUDGET_EXHAUSTED"
+    assert extract_payload(str(asset), "payload:export:0", max_bytes=budget) == canonical
+
 
 def test_bulk_data_tail_heuristic_is_gone(tmp_path):
     import shutil, struct
