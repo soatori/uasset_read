@@ -132,6 +132,23 @@ def _load_document(file_path: Path, args):
     )
 
 
+def _validate_output_path(output: Path, input_path: Path, mappings_path: str | None) -> None:
+    """Reject output paths that resolve to any file the CLI will read."""
+    from uasset_read.package import open_package_bundle
+
+    output_resolved = output.resolve()
+    bundle = open_package_bundle(str(input_path))
+    input_paths = [input_path, *(Path(path) for path in bundle.files.values())]
+    if mappings_path is not None:
+        input_paths.append(Path(mappings_path))
+
+    for protected in input_paths:
+        if output_resolved == protected.resolve():
+            raise ValueError("Output path aliases an input file")
+        if output.exists() and protected.exists() and output.samefile(protected):
+            raise ValueError("Output path aliases an input file")
+
+
 def _run(args) -> None:
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
@@ -158,6 +175,8 @@ def _run(args) -> None:
 
     mode = "debug" if args.debug else "normal"
     try:
+        if args.output:
+            _validate_output_path(Path(args.output), file_path, args.mappings)
         doc = _load_document(file_path, args)
         if args.output:
             path = write_projected_document(doc, Path(args.output), mode=mode)

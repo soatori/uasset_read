@@ -2715,7 +2715,65 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         assert output == projected[sample.name][mode]
 
 
-def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
+def _check_cli_preserves_input_files(tmp_path, monkeypatch, capsys):
+    import shutil
+    import sys
+
+    from uasset_read.cli import main
+
+    def _reject_overwrite(input_path: Path, output_path: Path):
+        before = input_path.read_bytes()
+        monkeypatch.setattr(sys, "argv", ["uasset_read", str(input_path), "-o", str(output_path)])
+        with pytest.raises(SystemExit) as exit_info:
+            main()
+        assert exit_info.value.code == 3
+        assert input_path.read_bytes() == before
+        assert "Output path aliases an input file" in capsys.readouterr().err
+
+    helm = tmp_path / "Helm_BP.uasset"
+    shutil.copy2(SAMPLES / helm.name, helm)
+    _reject_overwrite(helm, helm)
+
+    hardlink = tmp_path / "Helm_BP-hardlink.uasset"
+    try:
+        hardlink.hardlink_to(helm)
+    except OSError:
+        pass  # Some filesystems do not support hard links.
+    else:
+        _reject_overwrite(helm, hardlink)
+
+    bulk = tmp_path / "T_ParserBulk.uasset"
+    shutil.copy2(SAMPLES / bulk.name, bulk)
+    bulk_payload = tmp_path / "T_ParserBulk.uexp"
+    shutil.copy2(SAMPLES / bulk_payload.name, bulk_payload)
+    _reject_overwrite(bulk, bulk_payload)
+
+    mapped = tmp_path / "BP_UnversionedTest.uasset"
+    mapping = tmp_path / "UnversionedTest.usmap"
+    shutil.copy2(SAMPLES / mapped.name, mapped)
+    shutil.copy2(SAMPLES / mapping.name, mapping)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["uasset_read", str(mapped), "--mappings", str(mapping), "-o", str(mapping)],
+    )
+    before = mapping.read_bytes()
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+    assert exit_info.value.code == 3
+    assert mapping.read_bytes() == before
+    assert "Output path aliases an input file" in capsys.readouterr().err
+
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(sys, "argv", ["uasset_read", str(helm), "-o", str(output)])
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+    assert exit_info.value.code == 0
+    assert json.loads(output.read_text(encoding="utf-8"))["format_version"] == "4.0"
+    capsys.readouterr()
+
+
+def test_critical_boundary_guards(monkeypatch, caplog, capsys, tmp_path):
     """Keep the mandatory trust-boundary checks in one bounded aggregate item."""
     import logging
     import struct
@@ -2768,6 +2826,8 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     from uasset_read.parsers.blueprint.graph import _link_record_from_raw
     from uasset_read.projection import project_document
     from uasset_read.serializers.blueprint_graph import resolve_pin_links
+
+    _check_cli_preserves_input_files(tmp_path, monkeypatch, capsys)
 
     ue58_document = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
     debug_document = project_document(ue58_document, mode="debug")
