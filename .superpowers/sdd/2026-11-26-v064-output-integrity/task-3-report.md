@@ -44,3 +44,16 @@ Command: `python -m pytest -q tests/test_samples.py::test_critical_boundary_guar
 ```
 
 `git diff --check` exited 0.
+
+## Review fix (round 2)
+
+The non-finite projection test now clears `uasset_read.package._parse_cached` in its `finally` block after restoring the original property entries.
+
+Command: `python -m pytest -q tests/test_samples.py::test_critical_boundary_guards`
+
+```text
+.                                                                        [100%]
+1 passed in 4.36s
+```
+
+`git diff --check` exited 0.

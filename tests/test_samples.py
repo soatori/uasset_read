@@ -7570,7 +7570,7 @@ def _check_projection_rejects_nonfinite_numbers(tmp_path, monkeypatch, capsys):
 
     import pytest
 
-    from uasset_read.package import parse_package_document
+    from uasset_read.package import _parse_cached, parse_package_document
     from uasset_read.projection import _require_finite_numbers, project_document
     from uasset_read.projections.bundle import write_projected_document
 
@@ -7627,3 +7627,4 @@ def _check_projection_rejects_nonfinite_numbers(tmp_path, monkeypatch, capsys):
         assert json.loads(output.read_text(encoding="utf-8"))["format_version"] == "4.0"
     finally:
         bag.entries = original_entries
+        _parse_cached.cache_clear()
