@@ -210,11 +210,8 @@ def extract_kismet_decompiled(
             bytecode_status = "partial" if has_opaque else "parsed"
 
             # Normalize into instruction IR + CFG for the projected functions dict.
-            from uasset_read.parsers.blueprint.bytecode import (
-                normalize_instructions,
-                project_instruction,
-            )
-            from uasset_read.parsers.blueprint.control_flow import build_cfg, project_cfg
+            from uasset_read.parsers.blueprint.bytecode import normalize_instructions
+            from uasset_read.parsers.blueprint.control_flow import build_cfg
 
             instructions = normalize_instructions(expressions)
             # CFG diagnostics attach to the result (errors field) so the
@@ -232,8 +229,8 @@ def extract_kismet_decompiled(
                     script_source_range=script_result.script_source_range,
                     expressions=expressions,
                     bytecode_status=bytecode_status,
-                    instructions=[project_instruction(i) for i in instructions],
-                    cfg=project_cfg(cfg),
+                    instructions=instructions,
+                    cfg=cfg,
                     native_fields=list(script_result.native_fields),
                     function_flags=script_result.function_flags,
                     errors=cfg_diagnostics,

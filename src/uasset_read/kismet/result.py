@@ -7,11 +7,14 @@ C++ pseudocode generation was retired 2026-09-10 (Gate K).
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
+from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction, project_instruction
+from uasset_read.parsers.blueprint.control_flow import ControlFlowGraph, project_cfg
 
 if TYPE_CHECKING:
     from uasset_read.kismet.native_fields import NativeFieldDeclaration
@@ -64,9 +67,9 @@ class KismetDecompiledResult:
     class_name: str = ""
     script_source_range: ByteRegion | None = None
     expressions: list[Any] = field(default_factory=list)
-    # Projected instruction IR + CFG (plan Task 7); plain JSON-safe dicts.
-    instructions: list[dict[str, Any]] = field(default_factory=list)
-    cfg: dict[str, Any] | None = None
+    # Typed instruction IR + CFG are shared with FunctionAnalysis.
+    instructions: list[BytecodeInstruction] = field(default_factory=list)
+    cfg: ControlFlowGraph | None = None
     error_code: str | None = None
     error_message: str | None = None
     error_context: dict[str, Any] | None = None
@@ -86,9 +89,19 @@ class KismetDecompiledResult:
         infer_bytecode_confidence(self.bytecode_status)  # validates
 
     def to_dict(self) -> dict:
-        d = asdict(self)
+        projected_fields = {"instructions", "cfg", "expressions", "native_fields", "errors", "script_source_range"}
+        d = {
+            item.name: deepcopy(getattr(self, item.name))
+            for item in self.__dataclass_fields__.values()
+            if item.name not in projected_fields
+        }
+        d["native_fields"] = [asdict(item) for item in self.native_fields]
+        d["errors"] = [asdict(item) for item in self.errors]
         d["bytecode_confidence"] = infer_bytecode_confidence(self.bytecode_status)
         d["expressions"] = [e.to_dict() for e in self.expressions]
+        d["instructions"] = [project_instruction(i) for i in self.instructions]
+        if self.cfg is not None:
+            d["cfg"] = project_cfg(self.cfg)
         if self.script_source_range is not None:
             d["script_source_range"] = project_region(self.script_source_range)
         return {k: v for k, v in d.items() if v is not None}

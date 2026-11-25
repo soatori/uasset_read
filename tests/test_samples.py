@@ -7052,7 +7052,42 @@ def test_cfg_and_exec_chain_edges_name_their_function():
 _POP_OPCODES = frozenset({"EX_PopExecutionFlow", "EX_PopExecutionFlowIfNot"})
 
 
-def test_bp_flow_stack_cfg_reports_unknown_target():
+def test_bp_flow_stack_cfg_reports_unknown_target(monkeypatch):
+    from uasset_read.package import _parse_cached
+    from uasset_read.parsers.blueprint import bytecode, control_flow
+
+    calls = {"normalize": 0, "cfg": 0}
+    normalize = bytecode.normalize_instructions
+    build = control_flow.build_cfg
+
+    def count_normalize(expressions):
+        result = normalize(expressions)
+        if result:
+            calls["normalize"] += 1
+        return result
+
+    def count_cfg(instructions, *args, **kwargs):
+        result = build(instructions, *args, **kwargs)
+        if instructions:
+            calls["cfg"] += 1
+        return result
+
+    monkeypatch.setattr(bytecode, "normalize_instructions", count_normalize)
+    monkeypatch.setattr(control_flow, "build_cfg", count_cfg)
+    _parse_cached.cache_clear()
+    out = _projected_package("BP_CombatCharacter.uasset")
+    functions = [
+        fn
+        for obj in out["objects"] if obj["id"] in {"export:1", "export:2"}
+        for fn in (obj.get("semantic") or {}).get("functions", [])
+        if fn.get("instructions")
+    ]
+    scripted_ids = {fn["object_id"] for fn in functions}
+    assert len(scripted_ids) == 45
+    assert calls == {"normalize": 45, "cfg": 45}
+    for owner_id in ("export:1", "export:2"):
+        assert any(fn["owner_object_id"] == owner_id for fn in functions)
+
     for sample in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset"):
         sem = _bp_semantic(sample)
         uber_fns = [f for f in sem["functions"] if f["function_name"].startswith("ExecuteUbergraph_")]

@@ -2004,27 +2004,23 @@ def _attach_blueprint_graph_extras(
 def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     """Typed FunctionAnalysis for one Kismet result (plan Task 8).
 
-    Reuses the already-decoded ``kr.expressions`` (no second binary pass) and
-    the same normalize/CFG builders the bridge used, keeping the typed IR the
-    correlation layer needs while the archive inputs are still open.
+    Reuses the typed instructions and CFG built by the bridge while the
+    archive inputs are still open.
     """
+    from dataclasses import replace
+
     from ..models.analysis import BytecodeStatus, FunctionAnalysis
-    from .blueprint.bytecode import normalize_instructions
     from .blueprint.control_flow import build_cfg
 
-    # CFG diagnostics ride on the bridge result's errors field (plan C1). The
-    # typed rebuild below is deterministic and would emit the same diagnostics
-    # again, so it writes to its own sink and only genuinely new entries are
-    # merged — one diagnostic per site, never a bridge+rebuild duplicate.
-    diagnostics = list(getattr(kr, "errors", None) or [])
-    instructions = []
-    cfg = build_cfg([], diagnostics=diagnostics)
-    if kr.expressions:
-        instructions = normalize_instructions(kr.expressions)
-        rebuilt_diagnostics: list = []
-        cfg = build_cfg(instructions, diagnostics=rebuilt_diagnostics)
-        seeded = {(d.code, d.message) for d in diagnostics}
-        diagnostics.extend(d for d in rebuilt_diagnostics if (d.code, d.message) not in seeded)
+    # Correlation annotates CFG and edges with the owning function name, so
+    # shallow-copy those containers while retaining shared blocks/instructions.
+    diagnostics = list(kr.errors)
+    instructions = kr.instructions
+    cfg = (
+        replace(kr.cfg, edges=[replace(edge) for edge in kr.cfg.edges])
+        if kr.cfg is not None
+        else build_cfg([], diagnostics=[])
+    )
     reads: set[str] = set()
     writes: set[str] = set()
     calls: list[str] = []
