@@ -26,16 +26,33 @@ class NonFiniteProjectionError(ValueError):
     """A projected value cannot be represented by standards-compliant JSON."""
 
 
-def _require_finite_numbers(value: object, pointer: str = "") -> None:
-    """Reject non-finite floats in JSON-shaped mappings and sequences."""
-    if isinstance(value, float) and not math.isfinite(value):
-        raise NonFiniteProjectionError(f"Non-finite number at {pointer or '/'}")
+def _nonfinite_path(value: object, path: list[str]) -> tuple[str, ...] | None:
+    """Return raw path tokens only on failure; avoid string work on valid data."""
+    if isinstance(value, float):
+        return tuple(path) if not math.isfinite(value) else None
     if isinstance(value, dict):
         for key, item in value.items():
-            _require_finite_numbers(item, f"{pointer}/{_pointer_token(str(key))}")
+            path.append(str(key))
+            found = _nonfinite_path(item, path)
+            path.pop()
+            if found is not None:
+                return found
     elif isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
-            _require_finite_numbers(item, f"{pointer}/{index}")
+            path.append(str(index))
+            found = _nonfinite_path(item, path)
+            path.pop()
+            if found is not None:
+                return found
+    return None
+
+
+def _require_finite_numbers(value: object, pointer: str = "") -> None:
+    """Reject non-finite floats in JSON-shaped mappings and sequences."""
+    path = _nonfinite_path(value, [])
+    if path is not None:
+        full_path = pointer + "".join(f"/{_pointer_token(token)}" for token in path)
+        raise NonFiniteProjectionError(f"Non-finite number at {full_path or '/'}")
 
 _VALID_MODES = ("normal", "debug")
 
@@ -401,5 +418,7 @@ def project_document(
             "diagnostic_details": [diagnostic_detail(d, i) for i, d in enumerate(diagnostics)],
             "byte_accounting": _byte_accounting(document),
         }
-    _require_finite_numbers(result)
+    for key, value in result.items():
+        if key != "objects":
+            _require_finite_numbers(value, f"/{_pointer_token(key)}")
     return result

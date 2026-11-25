@@ -29,3 +29,18 @@ Command: `python -m pytest -q tests/test_samples.py::test_critical_boundary_guar
 Added recursive finite-float validation for mapping/list/tuple JSON values, validating object records before embedded projection generation and the completed envelope afterward. The writer and CLI JSON serialization now set `allow_nan=False`; CLI maps the dedicated projection error to exit 1; Agent inspection returns the existing `PACKAGE_PARSE_FAILED` envelope with the projection stage and JSON Pointer message. The focused test covers NaN, positive/negative infinity, nested tuple paths, writer preservation, CLI and Agent behavior, and finite output.
 
 Commit: `fix: reject non-finite values in v4 JSON output`
+
+## Review fix (round 1)
+
+Changed the finite walk to collect raw path tokens and escape/build a JSON Pointer only after finding a non-finite value. Object projections remain checked before embedded projection creation; the post-build check skips `objects` and validates only other envelope keys.
+
+The focused helper now restores its original cached property entries in `finally`. Agent assertions cover `PACKAGE_PARSE_FAILED`, `agent.inspect_package`, projection-stage wording, and the field path.
+
+Command: `python -m pytest -q tests/test_samples.py::test_critical_boundary_guards`
+
+```text
+.                                                                        [100%]
+1 passed in 3.68s
+```
+
+`git diff --check` exited 0.

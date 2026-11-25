@@ -7585,33 +7585,45 @@ def _check_projection_rejects_nonfinite_numbers(tmp_path, monkeypatch, capsys):
     with pytest.raises(ValueError, match=r"/nested/0"):
         _require_finite_numbers({"nested": (float("nan"),)})
 
-    for value in (float("nan"), float("inf"), float("-inf")):
+    try:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            bag.entries = list(original_entries)
+            entry = bag.entries[target]
+            bag.entries[target] = dataclasses.replace(
+                entry, value={"kind": "value", "type": entry.type_name, "value": value}
+            )
+            for mode in ("normal", "debug"):
+                with pytest.raises(ValueError, match=r"Non-finite.*/objects/"):
+                    project_document(document, mode=mode)
+            output.write_bytes(b"existing")
+            with pytest.raises(ValueError):
+                write_projected_document(document, output)
+            assert output.read_bytes() == b"existing"
+
+            import uasset_read.agent_tools as agent_tools
+
+            monkeypatch.setattr(agent_tools, "parse_package_document", lambda *args, **kwargs: document)
+            with pytest.raises(SystemExit) as exc:
+                from uasset_read.cli import main
+                import uasset_read.cli as cli
+
+                monkeypatch.setattr(cli, "_load_document", lambda *args, **kwargs: document)
+                monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample)])
+                main()
+            assert exc.value.code == 1
+            assert capsys.readouterr().out == ""
+            result = agent_tools.inspect_package(str(sample))
+            assert result["code"] == "PACKAGE_PARSE_FAILED"
+            assert result["stage"] == "agent.inspect_package"
+            assert "projection failed" in result["error"].lower()
+            assert "/objects/" in result["error"]
+
         bag.entries = list(original_entries)
         entry = bag.entries[target]
-        bag.entries[target] = dataclasses.replace(entry, value={"kind": "value", "type": entry.type_name, "value": value})
-        for mode in ("normal", "debug"):
-            with pytest.raises(ValueError, match=r"Non-finite.*/objects/"):
-                project_document(document, mode=mode)
-        output.write_bytes(b"existing")
-        with pytest.raises(ValueError):
-            write_projected_document(document, output)
-        assert output.read_bytes() == b"existing"
-
-        import uasset_read.agent_tools as agent_tools
-        monkeypatch.setattr(agent_tools, "parse_package_document", lambda *args, **kwargs: document)
-        with pytest.raises(SystemExit) as exc:
-            from uasset_read.cli import main
-            import uasset_read.cli as cli
-            monkeypatch.setattr(cli, "_load_document", lambda *args, **kwargs: document)
-            monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample)])
-            main()
-        assert exc.value.code == 1
-        assert capsys.readouterr().out == ""
-        result = agent_tools.inspect_package(str(sample))
-        assert result["code"] == "PACKAGE_PARSE_FAILED"
-
-    bag.entries = list(original_entries)
-    entry = bag.entries[target]
-    bag.entries[target] = dataclasses.replace(entry, value={"kind": "value", "type": entry.type_name, "value": 1.25})
-    write_projected_document(document, output)
-    assert json.loads(output.read_text(encoding="utf-8"))["format_version"] == "4.0"
+        bag.entries[target] = dataclasses.replace(
+            entry, value={"kind": "value", "type": entry.type_name, "value": 1.25}
+        )
+        write_projected_document(document, output)
+        assert json.loads(output.read_text(encoding="utf-8"))["format_version"] == "4.0"
+    finally:
+        bag.entries = original_entries
