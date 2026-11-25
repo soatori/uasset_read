@@ -61,7 +61,13 @@ def _sanitize_semantic(
                 continue
             if key in _BANNED_SEMANTIC_EVIDENCE_KEYS:
                 if isinstance(item, dict):
-                    entries.append({"object_id": object_id, "json_pointer": child, "region": item})
+                    if strip_debug_evidence:
+                        region = item
+                    else:
+                        import copy
+
+                        region = copy.deepcopy(item)
+                    entries.append({"object_id": object_id, "json_pointer": child, "region": region})
                 continue
             out[key] = _sanitize_semantic(
                 item, object_id, child, entries, strip_debug_evidence=strip_debug_evidence

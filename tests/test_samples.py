@@ -2367,6 +2367,35 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
         package.close()
 
 
+def _check_debug_evidence_is_detached():
+    import copy
+
+    from uasset_read.agent_tools import inspect_package
+    from uasset_read.package import _parse_cached
+
+    sample = SAMPLES / "Helm_BP.uasset"
+    try:
+        first = inspect_package(sample, mode="debug")
+        second = inspect_package(sample, mode="debug")
+        entry_key = ("export:0", "/declaration/source_range")
+
+        def find_region(document):
+            entry = next(
+                item for item in document["debug"]["semantic_source_ranges"]
+                if (item["object_id"], item["json_pointer"]) == entry_key
+            )
+            return entry["region"]
+
+        region = find_region(first)
+        before = copy.deepcopy(region)
+        assert region["start"] == 141365
+        region["start"] += 1
+        region["source_slices"][0]["source_start"] += 1
+        assert find_region(second) == before
+    finally:
+        _parse_cached.cache_clear()
+
+
 def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     """Real samples exercise both v4 modes and every public producer route."""
     import sys
@@ -2377,6 +2406,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
     from uasset_read.projections.bundle import write_projected_document
+
+    _check_debug_evidence_is_detached()
 
     schema = json.loads((ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8"))
     top_level = {
