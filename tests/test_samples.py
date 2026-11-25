@@ -5056,7 +5056,7 @@ def test_iostore_directory_index_lists_real_packages():
         assert chunk.length > 0
 
 
-def test_iostore_toc_read_does_not_load_the_container():
+def test_iostore_toc_read_does_not_load_the_container(monkeypatch, tmp_path):
     """A TOC read must never copy the .ucas into memory (#624 implementation acceptance).
 
     The 247 MB data archive is local-only (gitignored, ``committed: false``); when it is
@@ -5064,7 +5064,92 @@ def test_iostore_toc_read_does_not_load_the_container():
     """
     import tracemalloc
 
-    from uasset_read.iostore import read_toc
+    import shutil
+
+    from uasset_read.iostore import IoStoreTocError, read_toc
+
+    class ReadRecorder:
+        def __init__(self):
+            self.opens = []
+            self.reads = []
+            self.short_next = False
+
+        def open(self, path, mode="r", *args, **kwargs):
+            fh = original_open(path, mode, *args, **kwargs)
+            self.opens.append(Path(path))
+            recorder = self
+
+            class TrackedFile:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return fh.__exit__(*exc)
+
+                def read(self, size=-1):
+                    offset = fh.tell()
+                    recorder.reads.append((offset, size))
+                    data = fh.read(size)
+                    if recorder.short_next:
+                        recorder.short_next = False
+                        return data[:-1]
+                    return data
+
+                def __getattr__(self, name):
+                    return getattr(fh, name)
+
+            return TrackedFile()
+
+    original_open = Path.open
+    recorder = ReadRecorder()
+
+    def tracked_open(path, mode="r", *args, **kwargs):
+        return recorder.open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+
+    def _check_toc_reads_validated_spans(monkeypatch, tmp_path):
+        for name, entry_count, block_count, chunk_type in (
+            ("MyProject-Windows.utoc", 2221, 6694, None),
+            ("global.utoc", 1, 49, "ScriptObjects"),
+        ):
+            recorder.reads.clear()
+            recorder.opens.clear()
+            toc = read_toc(CONTAINERS / name)
+            assert recorder.opens == [CONTAINERS / name]
+            assert recorder.reads[0] == (0, 144)
+            assert all(0 <= size <= 512 * 1024 * 1024 for _, size in recorder.reads[1:])
+            file_size = (CONTAINERS / name).stat().st_size
+            assert all(offset + size <= file_size for offset, size in recorder.reads)
+            assert toc.entry_count == entry_count
+            assert toc.compression_block_count == block_count
+            if chunk_type:
+                assert [chunk.type_name for chunk in toc.chunks] == [chunk_type]
+
+        assert not any(path.suffix == ".ucas" for path in recorder.opens)
+
+        truncated = tmp_path / "truncated.utoc"
+        shutil.copy2(CONTAINERS / "global.utoc", truncated)
+        truncated.write_bytes(truncated.read_bytes()[:-1])
+        recorder.reads.clear()
+        recorder.opens.clear()
+        with pytest.raises(IoStoreTocError):
+            read_toc(truncated)
+        assert recorder.reads == [(0, 144)]
+
+        missing = tmp_path / "missing.utoc"
+        recorder.reads.clear()
+        with pytest.raises(IoStoreTocError):
+            read_toc(missing)
+        assert recorder.reads == []
+
+        recorder.reads.clear()
+        recorder.short_next = True
+        with pytest.raises(IoStoreTocError):
+            read_toc(CONTAINERS / "global.utoc")
+        assert recorder.reads == [(0, 144)]
+
+    _check_toc_reads_validated_spans(monkeypatch, tmp_path)
 
     toc_path = CONTAINERS / "MyProject-Windows.utoc"
     tracemalloc.start()

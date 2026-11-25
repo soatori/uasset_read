@@ -33,10 +33,12 @@ hash fields are write-only for the current read-only surface and are skipped.
 
 from __future__ import annotations
 
+import os
 import struct
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 TOC_MAGIC = b"-==--==--==--==-"  # FIoStoreTocHeader::TocMagicImg (IoStore.h:48)
 TOC_HEADER_SIZE = 144
@@ -199,6 +201,17 @@ def _array_count(blob: bytes, pos: int, element_size: int, what: str, limit: int
     return count
 
 
+def _read_toc_range(fh: BinaryIO, offset: int, size: int, label: str) -> bytes:
+    """Read one previously validated TOC range, rejecting short reads."""
+    if size == 0:
+        return b""
+    fh.seek(offset)
+    data = fh.read(size)
+    if len(data) != size:
+        raise IoStoreTocError(f"truncated {label}: expected {size} bytes, got {len(data)}")
+    return data
+
+
 def _read_fstring(blob: bytes, pos: int, limit: int) -> tuple[str, int]:
     """FString: int32 length; >0 ANSI with the NUL counted, <0 UTF-16 with the NUL counted."""
     if pos + 4 > limit:
@@ -294,127 +307,142 @@ def read_toc(path: str | Path) -> IoStoreToc:
     """Parse a ``.utoc`` index. Raises ``IoStoreTocError`` instead of guessing on damage."""
     path = Path(path)
     try:
-        data = path.read_bytes()
+        fh = path.open("rb")
     except OSError as exc:
         raise IoStoreTocError(f"{path}: cannot read TOC ({exc.strerror})") from exc
-    size = len(data)
-    if size < TOC_HEADER_SIZE:
-        raise IoStoreTocError(f"{path.name}: {size} bytes is smaller than a TOC header")
-    if data[:16] != TOC_MAGIC:
-        raise IoStoreTocError(f"{path.name}: not an IoStore TOC (magic {data[:16]!r})")
+    try:
+        with fh:
+            size = os.fstat(fh.fileno()).st_size
+            if size < TOC_HEADER_SIZE:
+                raise IoStoreTocError(f"{path.name}: {size} bytes is smaller than a TOC header")
+            data = _read_toc_range(fh, 0, TOC_HEADER_SIZE, "TOC header")
+            if data[:16] != TOC_MAGIC:
+                raise IoStoreTocError(f"{path.name}: not an IoStore TOC (magic {data[:16]!r})")
 
-    (
-        version,
-        _reserved0,
-        _reserved1,
-        header_size,
-        entry_count,
-        block_count,
-        block_entry_size,
-        method_count,
-        method_name_length,
-        compression_block_size,
-        directory_index_size,
-        _partition_count,
-    ) = struct.unpack_from("<BBH" + "I" * 9, data, 16)
-    encryption_key_guid = data[64:80].hex()
-    (container_flags,) = struct.unpack_from("<B", data, 80)
-    perfect_hash_seeds = struct.unpack_from("<I", data, 84)[0]
-    chunks_without_perfect_hash = struct.unpack_from("<I", data, 96)[0]
+            (
+                version,
+                _reserved0,
+                _reserved1,
+                header_size,
+                entry_count,
+                block_count,
+                block_entry_size,
+                method_count,
+                method_name_length,
+                compression_block_size,
+                directory_index_size,
+                _partition_count,
+            ) = struct.unpack_from("<BBH" + "I" * 9, data, 16)
+            encryption_key_guid = data[64:80].hex()
+            (container_flags,) = struct.unpack_from("<B", data, 80)
+            perfect_hash_seeds = struct.unpack_from("<I", data, 84)[0]
+            chunks_without_perfect_hash = struct.unpack_from("<I", data, 96)[0]
 
-    if header_size != TOC_HEADER_SIZE:
-        raise IoStoreTocError(f"{path.name}: header size {header_size} != sizeof(FIoStoreTocHeader)")
-    if not TOC_VERSION_MIN <= version <= TOC_VERSION_MAX:
-        raise IoStoreTocError(f"{path.name}: unsupported TOC version {version}")
-    if block_entry_size != COMPRESSED_BLOCK_ENTRY_SIZE:
-        raise IoStoreTocError(f"{path.name}: block entry size {block_entry_size} != 12")
-    if method_name_length <= 0 or method_count > 64 or entry_count > _MAX_ENTRIES:
-        raise IoStoreTocError(f"{path.name}: implausible method/entry table {method_count}x{method_name_length}")
-    if container_flags & FLAG_SIGNED:
-        raise IoStoreTocError(f"{path.name}: signed container; signature key validation is not implemented")
-    if container_flags & FLAG_ENCRYPTED:
-        raise IoStoreTocError(f"{path.name}: encrypted container (guid {encryption_key_guid}); no key support")
+            if header_size != TOC_HEADER_SIZE:
+                raise IoStoreTocError(f"{path.name}: header size {header_size} != sizeof(FIoStoreTocHeader)")
+            if not TOC_VERSION_MIN <= version <= TOC_VERSION_MAX:
+                raise IoStoreTocError(f"{path.name}: unsupported TOC version {version}")
+            if block_entry_size != COMPRESSED_BLOCK_ENTRY_SIZE:
+                raise IoStoreTocError(f"{path.name}: block entry size {block_entry_size} != 12")
+            if method_name_length <= 0 or method_count > 64 or entry_count > _MAX_ENTRIES:
+                raise IoStoreTocError(f"{path.name}: implausible method/entry table {method_count}x{method_name_length}")
+            if container_flags & FLAG_SIGNED:
+                raise IoStoreTocError(f"{path.name}: signed container; signature key validation is not implemented")
+            if container_flags & FLAG_ENCRYPTED:
+                raise IoStoreTocError(f"{path.name}: encrypted container (guid {encryption_key_guid}); no key support")
 
-    # Order of the arrays after the header, per FIoStoreTocResourceView::Read.
-    spans: list[tuple[str, int]] = [("chunk ids", entry_count * CHUNK_ID_SIZE)]
-    spans.append(("chunk offset/length", entry_count * OFFSET_LENGTH_SIZE))
-    if version >= VERSION_PERFECT_HASH:
-        spans.append(("perfect hash seeds", perfect_hash_seeds * 4))
-    if version >= VERSION_PERFECT_HASH_OVERFLOW:
-        spans.append(("chunks without perfect hash", chunks_without_perfect_hash * 4))
-    spans.append(("compression blocks", block_count * COMPRESSED_BLOCK_ENTRY_SIZE))
-    spans.append(("compression method names", method_count * method_name_length))
-    spans.append(("directory index", directory_index_size))
-    meta_size = CHUNK_META_SIZE if version >= VERSION_IOHASH_METAS else CHUNK_META_SIZE_LEGACY
-    spans.append(("chunk metas", entry_count * meta_size))
-    total = TOC_HEADER_SIZE
-    for label, needed in spans:
-        if needed > _MAX_ARRAY_BYTES:
-            raise IoStoreTocError(f"{path.name}: {label} claims {needed} bytes")
-        total += needed
-    if total != size:
-        raise IoStoreTocError(f"{path.name}: TOC layout needs {total} bytes but the file holds {size}")
+            # Order of the arrays after the header, per FIoStoreTocResourceView::Read.
+            span_sizes: list[tuple[str, int]] = [("chunk ids", entry_count * CHUNK_ID_SIZE)]
+            span_sizes.append(("chunk offset/length", entry_count * OFFSET_LENGTH_SIZE))
+            if version >= VERSION_PERFECT_HASH:
+                span_sizes.append(("perfect hash seeds", perfect_hash_seeds * 4))
+            if version >= VERSION_PERFECT_HASH_OVERFLOW:
+                span_sizes.append(("chunks without perfect hash", chunks_without_perfect_hash * 4))
+            span_sizes.append(("compression blocks", block_count * COMPRESSED_BLOCK_ENTRY_SIZE))
+            span_sizes.append(("compression method names", method_count * method_name_length))
+            span_sizes.append(("directory index", directory_index_size))
+            meta_size = CHUNK_META_SIZE if version >= VERSION_IOHASH_METAS else CHUNK_META_SIZE_LEGACY
+            span_sizes.append(("chunk metas", entry_count * meta_size))
 
-    pos = TOC_HEADER_SIZE
-    chunk_ids = [data[pos + i * CHUNK_ID_SIZE : pos + (i + 1) * CHUNK_ID_SIZE] for i in range(entry_count)]
-    pos += entry_count * CHUNK_ID_SIZE
-    offset_lengths = [
-        data[pos + i * OFFSET_LENGTH_SIZE : pos + (i + 1) * OFFSET_LENGTH_SIZE] for i in range(entry_count)
-    ]
-    pos += entry_count * OFFSET_LENGTH_SIZE
-    pos += perfect_hash_seeds * 4 + chunks_without_perfect_hash * 4
-    block_start = pos
-    pos += block_count * COMPRESSED_BLOCK_ENTRY_SIZE
-    blocks = []
-    for i in range(block_count):
-        raw = data[block_start + i * COMPRESSED_BLOCK_ENTRY_SIZE : block_start + (i + 1) * COMPRESSED_BLOCK_ENTRY_SIZE]
-        word1 = struct.unpack_from("<I", raw, 4)[0]
-        blocks.append(
-            IoStoreBlock(
-                offset=struct.unpack_from("<Q", raw, 0)[0] & ((1 << 40) - 1),
-                compressed_size=(word1 >> 8) & ((1 << 24) - 1),
-            )
-        )
-    stored_methods = [
-        data[pos + i * method_name_length : pos + (i + 1) * method_name_length].split(b"\x00", 1)[0]
-        for i in range(method_count)
-    ]
-    # UE's method table reserves index 0 for NAME_None and stores the names from index 1
-    # (IoStore.cpp:1355-1365), so "None" is re-added here for caller-facing indices.
-    methods = ("None",) + tuple(m.decode("ascii", "replace") for m in stored_methods if m and m != b"None")
-    pos += method_count * method_name_length
-    directory_start = pos
-    pos += directory_index_size
-    metas = [
-        data[pos + i * meta_size + (CHUNK_HASH_SIZE if version >= VERSION_IOHASH_METAS else 32)]
-        for i in range(entry_count)
-    ]
+            spans: dict[str, tuple[int, int]] = {}
+            total = TOC_HEADER_SIZE
+            for label, needed in span_sizes:
+                if needed > _MAX_ARRAY_BYTES:
+                    raise IoStoreTocError(f"{path.name}: {label} claims {needed} bytes")
+                end = total + needed
+                if end > size:
+                    raise IoStoreTocError(f"{path.name}: {label} range escapes the {size}-byte TOC")
+                spans[label] = (total, needed)
+                total = end
+            if total != size:
+                raise IoStoreTocError(f"{path.name}: TOC layout needs {total} bytes but the file holds {size}")
 
-    chunks = []
-    for i in range(entry_count):
-        ol = offset_lengths[i]
-        chunk_id = chunk_ids[i]
-        chunks.append(
-            IoStoreChunk(
-                index=i,
-                chunk_id=chunk_id,
-                type_id=chunk_id[11],  # FIoChunkId::GetChunkType() (IoChunkId.h:132)
-                # FIoOffsetAndLength: two big-endian 5-byte fields (IoOffsetLength.h).
-                offset=int.from_bytes(ol[:5], "big"),
-                length=int.from_bytes(ol[5:], "big"),
-                meta_flags=metas[i] & (META_COMPRESSED | META_MEMORY_MAPPED),
-            )
-        )
+            def read_span(label: str) -> bytes:
+                offset, length = spans[label]
+                return _read_toc_range(fh, offset, length, label)
 
-    mount_point = ""
-    files: tuple[IoStoreFile, ...] = ()
-    if directory_index_size:
-        if not container_flags & FLAG_INDEXED:
-            raise IoStoreTocError(f"{path.name}: directory index present without the Indexed flag")
-        mount_point, files = _parse_directory_index(data[directory_start : directory_start + directory_index_size])
-        for entry in files:
-            if not 0 <= entry.chunk_index < entry_count:
-                raise IoStoreTocError(f"{path.name}: file {entry.path!r} points at TOC entry {entry.chunk_index}")
+            chunk_id_data = read_span("chunk ids")
+            offset_length_data = read_span("chunk offset/length")
+            chunk_ids = [
+                chunk_id_data[i * CHUNK_ID_SIZE : (i + 1) * CHUNK_ID_SIZE] for i in range(entry_count)
+            ]
+            offset_lengths = [
+                offset_length_data[i * OFFSET_LENGTH_SIZE : (i + 1) * OFFSET_LENGTH_SIZE]
+                for i in range(entry_count)
+            ]
+            block_data = read_span("compression blocks")
+            blocks = []
+            for i in range(block_count):
+                raw = block_data[i * COMPRESSED_BLOCK_ENTRY_SIZE : (i + 1) * COMPRESSED_BLOCK_ENTRY_SIZE]
+                word1 = struct.unpack_from("<I", raw, 4)[0]
+                blocks.append(
+                    IoStoreBlock(
+                        offset=struct.unpack_from("<Q", raw, 0)[0] & ((1 << 40) - 1),
+                        compressed_size=(word1 >> 8) & ((1 << 24) - 1),
+                    )
+                )
+            method_data = read_span("compression method names")
+            stored_methods = [
+                method_data[i * method_name_length : (i + 1) * method_name_length].split(b"\x00", 1)[0]
+                for i in range(method_count)
+            ]
+            # UE's method table reserves index 0 for NAME_None and stores the names from index 1
+            # (IoStore.cpp:1355-1365), so "None" is re-added here for caller-facing indices.
+            methods = ("None",) + tuple(m.decode("ascii", "replace") for m in stored_methods if m and m != b"None")
+            directory_data = read_span("directory index")
+            metas_data = read_span("chunk metas")
+            metas = [
+                metas_data[i * meta_size + (CHUNK_HASH_SIZE if version >= VERSION_IOHASH_METAS else 32)]
+                for i in range(entry_count)
+            ]
+
+            chunks = []
+            for i in range(entry_count):
+                ol = offset_lengths[i]
+                chunk_id = chunk_ids[i]
+                chunks.append(
+                    IoStoreChunk(
+                        index=i,
+                        chunk_id=chunk_id,
+                        type_id=chunk_id[11],  # FIoChunkId::GetChunkType() (IoChunkId.h:132)
+                        # FIoOffsetAndLength: two big-endian 5-byte fields (IoOffsetLength.h).
+                        offset=int.from_bytes(ol[:5], "big"),
+                        length=int.from_bytes(ol[5:], "big"),
+                        meta_flags=metas[i] & (META_COMPRESSED | META_MEMORY_MAPPED),
+                    )
+                )
+
+            mount_point = ""
+            files: tuple[IoStoreFile, ...] = ()
+            if directory_index_size:
+                if not container_flags & FLAG_INDEXED:
+                    raise IoStoreTocError(f"{path.name}: directory index present without the Indexed flag")
+                mount_point, files = _parse_directory_index(directory_data)
+                for entry in files:
+                    if not 0 <= entry.chunk_index < entry_count:
+                        raise IoStoreTocError(f"{path.name}: file {entry.path!r} points at TOC entry {entry.chunk_index}")
+    except OSError as exc:
+        raise IoStoreTocError(f"{path}: cannot read TOC ({exc.strerror})") from exc
 
     stem = path.name[: -len(".utoc")] if path.name.endswith(".utoc") else path.stem
     sibling = path.with_name(stem + ".ucas")
