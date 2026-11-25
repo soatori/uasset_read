@@ -26,7 +26,7 @@ def write_projected_document(
     payload = project_document(document, mode=mode)
     output_path = Path(output_path)
     output_path.write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+        json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True),
         encoding="utf-8",
     )
     return output_path

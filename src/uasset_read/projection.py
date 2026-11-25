@@ -8,6 +8,7 @@ block; stripping it and normalizing ``mode`` reproduces ``normal`` exactly.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from .models.byte_ranges import project_region
@@ -19,6 +20,22 @@ from .models.object_model import Dependency, ObjectRecord
 # the projection layer: PackageDocument stays a package-level aggregate with
 # no presentation-version state (v4 contract freeze).
 FORMAT_VERSION = "4.0"
+
+
+class NonFiniteProjectionError(ValueError):
+    """A projected value cannot be represented by standards-compliant JSON."""
+
+
+def _require_finite_numbers(value: object, pointer: str = "") -> None:
+    """Reject non-finite floats in JSON-shaped mappings and sequences."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise NonFiniteProjectionError(f"Non-finite number at {pointer or '/'}")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _require_finite_numbers(item, f"{pointer}/{_pointer_token(str(key))}")
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _require_finite_numbers(item, f"{pointer}/{index}")
 
 _VALID_MODES = ("normal", "debug")
 
@@ -336,6 +353,12 @@ def project_document(
     from uasset_read.projections.registry import project_records
 
     semantic_evidence: list[dict[str, Any]] = []
+    projected_objects = [
+        obj_to_dict(obj, semantic_evidence, strip_debug_evidence=(mode == "normal"))
+        for obj in document.objects
+    ]
+    for index, item in enumerate(projected_objects):
+        _require_finite_numbers(item, f"/objects/{index}")
     result: dict[str, Any] = {
         "format": "uasset_read.package",
         "format_version": FORMAT_VERSION,
@@ -348,10 +371,7 @@ def project_document(
             "total_imports": document.summary.total_imports,
             "total_exports": document.summary.total_exports,
         },
-        "objects": [
-            obj_to_dict(obj, semantic_evidence, strip_debug_evidence=(mode == "normal"))
-            for obj in document.objects
-        ],
+        "objects": projected_objects,
         "relations": [
             {
                 "kind": rel.kind,
@@ -381,4 +401,5 @@ def project_document(
             "diagnostic_details": [diagnostic_detail(d, i) for i, d in enumerate(diagnostics)],
             "byte_accounting": _byte_accounting(document),
         }
+    _require_finite_numbers(result)
     return result

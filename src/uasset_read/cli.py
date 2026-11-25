@@ -170,7 +170,7 @@ def _run(args) -> None:
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     logger.debug("Parsing package: %s", file_path.name)
-    from uasset_read.projection import project_document
+    from uasset_read.projection import NonFiniteProjectionError, project_document
     from uasset_read.projections.bundle import write_projected_document
 
     mode = "debug" if args.debug else "normal"
@@ -183,7 +183,11 @@ def _run(args) -> None:
             print(f"Output written to {path}", file=sys.stderr)
         else:
             projected = project_document(doc, mode=mode)
-            _write_stdout(json.dumps(projected, ensure_ascii=False, indent=2))
+            _write_stdout(json.dumps(projected, ensure_ascii=False, allow_nan=False, indent=2))
+    except NonFiniteProjectionError as e:
+        logger.debug("Parse/project error (full): %s", e, exc_info=True)
+        print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
     except Exception as e:
         logger.debug("Parse/project error (full): %s", e, exc_info=True)
         print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)

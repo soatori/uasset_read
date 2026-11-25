@@ -2860,6 +2860,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, capsys, tmp_path):
     from uasset_read.serializers.blueprint_graph import resolve_pin_links
 
     _check_cli_preserves_input_files(tmp_path, monkeypatch, capsys)
+    _check_projection_rejects_nonfinite_numbers(tmp_path, monkeypatch, capsys)
 
     ue58_document = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
     debug_document = project_document(ue58_document, mode="debug")
@@ -7559,3 +7560,58 @@ def test_extract_variable_name_rejects_dump_strings():
     assert _extract_variable_name("Axis X") == "Axis X"
     assert _extract_variable_name("FKismetPropertyPointer(path=FFieldPath())") is None
     assert _extract_variable_name("EX_Context(ContextExpression=x)") is None
+
+
+def _check_projection_rejects_nonfinite_numbers(tmp_path, monkeypatch, capsys):
+    import dataclasses
+    import json
+    import shutil
+    import sys
+
+    import pytest
+
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import _require_finite_numbers, project_document
+    from uasset_read.projections.bundle import write_projected_document
+
+    sample = tmp_path / "Helm_BP.uasset"
+    shutil.copyfile(SAMPLES / "Helm_BP.uasset", sample)
+    document = parse_package_document(str(sample), depth="decode")
+    owner = next(o for o in document.objects if o.id == "export:8")
+    bag = owner.properties
+    original_entries = list(bag.entries)
+    target = next(i for i, e in enumerate(original_entries) if e.type_name == "FloatProperty")
+    output = tmp_path / "projected.json"
+    with pytest.raises(ValueError, match=r"/nested/0"):
+        _require_finite_numbers({"nested": (float("nan"),)})
+
+    for value in (float("nan"), float("inf"), float("-inf")):
+        bag.entries = list(original_entries)
+        entry = bag.entries[target]
+        bag.entries[target] = dataclasses.replace(entry, value={"kind": "value", "type": entry.type_name, "value": value})
+        for mode in ("normal", "debug"):
+            with pytest.raises(ValueError, match=r"Non-finite.*/objects/"):
+                project_document(document, mode=mode)
+        output.write_bytes(b"existing")
+        with pytest.raises(ValueError):
+            write_projected_document(document, output)
+        assert output.read_bytes() == b"existing"
+
+        import uasset_read.agent_tools as agent_tools
+        monkeypatch.setattr(agent_tools, "parse_package_document", lambda *args, **kwargs: document)
+        with pytest.raises(SystemExit) as exc:
+            from uasset_read.cli import main
+            import uasset_read.cli as cli
+            monkeypatch.setattr(cli, "_load_document", lambda *args, **kwargs: document)
+            monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample)])
+            main()
+        assert exc.value.code == 1
+        assert capsys.readouterr().out == ""
+        result = agent_tools.inspect_package(str(sample))
+        assert result["code"] == "PACKAGE_PARSE_FAILED"
+
+    bag.entries = list(original_entries)
+    entry = bag.entries[target]
+    bag.entries[target] = dataclasses.replace(entry, value={"kind": "value", "type": entry.type_name, "value": 1.25})
+    write_projected_document(document, output)
+    assert json.loads(output.read_text(encoding="utf-8"))["format_version"] == "4.0"

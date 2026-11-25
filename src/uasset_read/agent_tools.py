@@ -18,7 +18,7 @@ from typing import Any, Literal, cast
 from .exceptions import BINARY_READ_ERRORS, ParseError, VersionError
 from .models.document import PackageDocument
 from .package import parse_package_document
-from .projection import project_document
+from .projection import NonFiniteProjectionError, project_document
 
 # Max response size for extract_payload (bytes)
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
@@ -104,7 +104,15 @@ def inspect_package(
     if error is not None:
         return error
     assert doc is not None
-    return project_document(doc, mode=mode)
+    try:
+        return project_document(doc, mode=mode)
+    except NonFiniteProjectionError as exc:
+        return _err(
+            "PACKAGE_PARSE_FAILED",
+            "agent.inspect_package",
+            recoverable=True,
+            message=f"Package projection failed: {type(exc).__name__}: {exc}",
+        )
 
 
 def extract_payload(
